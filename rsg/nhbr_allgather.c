@@ -7,6 +7,11 @@
 #include <errno.h>
 #include "mpi.h"
 
+struct time_stats {
+    double total;
+    double average;
+};
+
 #ifdef ERROR_CHECK
     #define Type_MPI MPI_INT
     typedef int Datatype;
@@ -15,15 +20,16 @@
     typedef char Datatype;
 #endif
 
+#define LARGE_MSG_THR 1024
 #define LARGE_MSG_ITR 300
 
-int make_nbrhood(int my_rank, double p, int size, MPI_Comm comm,
-                 int *indegree_ptr,
-                 int **sources_ptr,
-                 int **sourcesweights_ptr,
-                 int *outdegree_ptr,
-                 int **destinations_ptr,
-                 int **destweights_ptr)
+static int make_nhbrhood(int my_rank, double p, int size, MPI_Comm comm,
+                         int *indegree_ptr,
+                         int **sources_ptr,
+                         int **sourcesweights_ptr,
+                         int *outdegree_ptr,
+                         int **destinations_ptr,
+                         int **destweights_ptr)
 {
     int i, j, indgr, outdgr, inidx, outidx;
     indgr = outdgr = inidx = outidx = 0;
@@ -165,68 +171,103 @@ int make_nbrhood(int my_rank, double p, int size, MPI_Comm comm,
     return 0;
 }
 
+static struct time_stats iterate_coll(int itr,
+                                      Datatype *sendbuf, int sendcount,
+                                      Datatype *recvbuf, int recvcount,
+                                      MPI_Comm nhbr_comm)
+{
+    int skip = itr / 10;
+    double start_time = 0;
+    int i;
+    for(i = 0; i < itr; i++)
+    {
+        if(i == skip)
+            start_time = MPI_Wtime();
+
+        MPI_Request req;
+        MPI_Ineighbor_allgather(sendbuf, sendcount, Type_MPI,
+                                recvbuf, recvcount, Type_MPI,
+                                nhbr_comm, &req);
+        MPI_Wait(&req, MPI_STATUS_IGNORE);
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    double end_time = MPI_Wtime();
+
+    struct time_stats time_stats = {0};
+    time_stats.total = end_time - start_time;
+    time_stats.average = time_stats.total / (itr - skip);
+
+    return time_stats;
+}
+
+static void run_loop(int itr, int indgr, int outdgr, int my_rank, MPI_Comm nhbr_comm)
+{
+#ifdef ERROR_CHECK
+	int num_msg_sizes = 1;
+    int msg_sizes[1] = {1};
+#else
+	int num_msg_sizes = 8;
+    int msg_sizes[8] = {1, 4, 16, 64, 256, 1024, 4096, 16384};
+#endif
+
+    int max_msg_size = msg_sizes[num_msg_sizes - 1];
+    Datatype *sendbuf = (Datatype*) calloc(max_msg_size, sizeof(Datatype));
+    Datatype *recvbuf = (Datatype*) calloc(indgr * max_msg_size, sizeof(Datatype));
+
+    int i;
+#ifdef ERROR_CHECK
+    //initialize sendbuf
+    for(i = 0; i < max_msg_size; i++)
+	    sendbuf[i] = my_rank;
+#endif
+
+    for(i = 0; i < num_msg_sizes; i++)
+    {
+        int msg_size = msg_sizes[i];
+        if(my_rank == 0)
+            printf("------ Starting the experimet with %d Byte(s) ------\n", msg_size);
+
+        memset(recvbuf, 0, indgr * max_msg_size * sizeof(Datatype));
+        struct time_stats time_stats = {0};
+        if(msg_size > LARGE_MSG_THR && itr > LARGE_MSG_ITR)
+            time_stats = iterate_coll(LARGE_MSG_ITR,
+                                      sendbuf, msg_size, recvbuf, msg_size, nhbr_comm);
+        else
+            time_stats = iterate_coll(itr,
+                                      sendbuf, msg_size, recvbuf, msg_size, nhbr_comm);
+
+#ifdef ERROR_CHECK
+        int j;
+        for(j = 0; j < indgr; j++)
+        {
+            if(recvbuf[j] != srcs[j])
+            {
+                fprintf(stderr,
+                        "Rank %d: ERROR: mismatch between recv buffer "
+                        "and srcs at index %d\n", my_rank, j);
+                break;
+            }
+        }
+#endif
+
+        if(my_rank == 0)
+        {
+            printf("Total communication time = %lf  (s)\n", time_stats.total);
+            printf("Single iteration average time = %lf  (s)\n\n", time_stats.average);
+        }
+    }
+
+    free(sendbuf);
+    free(recvbuf);
+}
+
 int main(int argc, char** argv)
 {
     MPI_Init(&argc, &argv);
     int my_rank, comm_size;
     MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-
-    int i, j, kk, msg_size, itr, skip, shm_impl;
-	double p;
-    char *out_dir = NULL;
-
-    if(argc != 3)
-    {
-        if(my_rank == 0)
-            fprintf(stderr, "Usage: exec_file <sparsity factor (0 < p < 1)> "\
-                            "<number of iterations>\n");
-        MPI_Abort(MPI_COMM_WORLD, 1);
-        return 1;
-    }
-
-    p = atof(argv[1]);
-	itr = atoi(argv[2]);
-    out_dir = "rank_output_files";
-
-    FILE *fp = NULL;
-
-#ifdef ERROR_CHECK
-    char *cwd = getcwd(NULL, 0);
-    if(cwd == NULL)
-    {
-        fprintf(stderr, "Rank %d: Failed to get the current working directory\n",
-                my_rank);
-        MPI_Abort(MPI_COMM_WORLD, 1);
-        return 1;
-    }
-    char out_file[256];
-    snprintf(out_file, sizeof(out_file), "%s/%d", out_dir, my_rank);
-    fp = fopen(out_file, "w");
-    if(fp == NULL)
-    {
-        fprintf(stderr, "Failed to open file %s/%s\n", cwd, out_file);
-        free(cwd);
-        MPI_Abort(MPI_COMM_WORLD, 1);
-        return 1;
-    }
-#endif
-
-    //Defining the neighborhood
-    int indgr, outdgr;
-    int *srcs, *srcwghts, *dests, *destwghts;
-    int err = make_nbrhood(my_rank, p, comm_size, MPI_COMM_WORLD,
-                           &indgr, &srcs, &srcwghts,
-                           &outdgr, &dests, &destwghts);
-    if(err)
-    {
-        MPI_Abort(MPI_COMM_WORLD, 1);
-        return 1;
-    }
-
-	if(my_rank == 0)
-        printf("Rank %d: indegree = %d, outdegree = %d\n",
-                my_rank, indgr, outdgr);
 
     /* For gdb process attachment */
     /*
@@ -244,13 +285,64 @@ int main(int argc, char** argv)
     }
     */
 
+    if(argc != 3)
+    {
+        if(my_rank == 0)
+            fprintf(stderr, "Usage: exec_file <sparsity factor (0 < p < 1)> "\
+                            "<number of iterations>\n");
+        MPI_Abort(MPI_COMM_WORLD, 1);
+        return 1;
+    }
+
+    double p = atof(argv[1]);
+	int itr = atoi(argv[2]);
+
 #ifdef ERROR_CHECK
-    fprintf(fp, "indegree = %d\n", indgr);
-    fprintf(fp, "outdegree = %d\n", outdgr);
+    char *out_dir = "rank_output_files";
+    char *cwd = getcwd(NULL, 0);
+    if(cwd == NULL)
+    {
+        fprintf(stderr, "Rank %d: Failed to get the current working directory\n",
+                my_rank);
+        MPI_Abort(MPI_COMM_WORLD, 1);
+        return 1;
+    }
+    char out_file[256];
+    snprintf(out_file, sizeof(out_file), "%s/%d", out_dir, my_rank);
+    FILE *fp = fopen(out_file, "w");
+    if(fp == NULL)
+    {
+        fprintf(stderr, "Failed to open file %s/%s\n", cwd, out_file);
+        free(cwd);
+        MPI_Abort(MPI_COMM_WORLD, 1);
+        return 1;
+    }
+#endif
+
+    //Defining the neighborhood
+    int indgr, outdgr;
+    int *srcs, *srcwghts, *dests, *destwghts;
+    int err = make_nhbrhood(my_rank, p, comm_size, MPI_COMM_WORLD,
+                           &indgr, &srcs, &srcwghts,
+                           &outdgr, &dests, &destwghts);
+    if(err)
+    {
+        MPI_Abort(MPI_COMM_WORLD, 1);
+        return 1;
+    }
+
+	if(my_rank == 0)
+        printf("Rank %d: indegree = %d, outdegree = %d\n",
+                my_rank, indgr, outdgr);
+
+#ifdef ERROR_CHECK
+    fprintf(fp, "indegree = %d, outdegree = %d\n", indgr, outdgr);
+
     fprintf(fp, "source ranks:\n");
     for(j = 0; j < indgr; j++)
         fprintf(fp, "%d ", srcs[j]);
     fprintf(fp, "\n");
+
     fprintf(fp, "destination ranks:\n");
     for(j = 0; j < outdgr; j++)
         fprintf(fp, "%d ", dests[j]);
@@ -258,92 +350,20 @@ int main(int argc, char** argv)
 #endif
 
     //Create a communicator with the topology information attached
-    MPI_Comm nbr_comm;
+    MPI_Comm nhbr_comm;
     MPI_Dist_graph_create_adjacent(MPI_COMM_WORLD,
                                    indgr, srcs, srcwghts,
                                    outdgr, dests, destwghts,
-                                   MPI_INFO_NULL, 0, &nbr_comm);
-#ifdef ERROR_CHECK
-	int num_msg_sizes = 1;
-    int msg_sizes[1] = {1};
-#else
-	int num_msg_sizes = 8;
-    int msg_sizes[8] = {1, 4, 16, 64, 256, 1024, 4096, 16384};
-#endif
-    int max_msg_size = msg_sizes[num_msg_sizes - 1];
-    Datatype *sendbuf = (Datatype*) malloc(max_msg_size * sizeof(Datatype));
-    Datatype *recvbuf = (Datatype*) calloc(indgr * max_msg_size, sizeof(Datatype));
+                                   MPI_INFO_NULL, 0, &nhbr_comm);
 
-#ifdef ERROR_CHECK
-    //initialize sendbuf
-    for(i = 0; i < max_msg_size; i++)
-	    sendbuf[i] = my_rank;
-#endif
+    run_loop(itr, indgr, outdgr, my_rank, nhbr_comm);
 
-    MPI_Request req;
-    for(kk = 0; kk < num_msg_sizes; kk++)
-    {
-        msg_size = msg_sizes[kk];
-        if(my_rank == 0)
-            printf("------ Starting the experimet with %d Byte(s) ------\n", msg_size);
-
-        if(msg_size > 1024 && itr > LARGE_MSG_ITR)
-            itr = LARGE_MSG_ITR;
-        else
-            itr = atoi(argv[2]);
-
-        skip = itr / 10;
-
-        double start_time, end_time;
-        for(i = 0; i < itr; i++)
-        {
-#ifdef ERROR_CHECK
-            memset(recvbuf, 0, indgr * max_msg_size * sizeof(Datatype));
-#endif
-            if(i == skip)
-                start_time = MPI_Wtime();
-
-            MPI_Ineighbor_allgather(sendbuf, msg_size, Type_MPI,
-                                    recvbuf, msg_size, Type_MPI,
-                                    nbr_comm, &req);
-            MPI_Wait(&req, MPI_STATUS_IGNORE);
-
-#ifdef ERROR_CHECK
-            for(j = 0; j < indgr; j++)
-            {
-                if(recvbuf[j] != srcs[j])
-                {
-                    fprintf(stderr,
-                            "Rank %d: ERROR: mismatch between recv buffer "
-                            "and srcs at index %d\n", my_rank, j);
-                    break;
-                }
-            }
-#endif
-            if(my_rank == 0)
-                printf("."); //Progress bar
-        }
-
-        MPI_Barrier(MPI_COMM_WORLD);
-        end_time = MPI_Wtime();
-
-        if(my_rank == 0)
-        {
-            printf("\n");
-            printf("Total communication time = %lf  (s)\n", end_time - start_time);
-            printf("Single iteration average time for p = %lf "\
-                    "and msg_size = %d is %lf  (s)\n\n", p, msg_size,
-                    (end_time - start_time)/(itr - skip));
-        }
-    }
-
-    free(sendbuf);
-    free(recvbuf);
 #ifdef ERROR_CHECK
     fclose(fp);
     free(cwd);
 #endif
-    MPI_Comm_free(&nbr_comm);
+
+    MPI_Comm_free(&nhbr_comm);
     MPI_Finalize();
     return 0;
 }
