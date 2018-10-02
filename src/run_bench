@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+
+set -eu
+set -o pipefail
+
+bench_names=(rsg-nhbr-allgather moore-nhbr-allgather)
+
+num_procs=16
+
+itr=1000
+
+frndship_thr=4
+
+exec_root=.
+
+out_root=.
+
+moore-nhbr-allgather()
+{
+    moore-nhbr-coll allgather
+}
+
+moore-nhbr-coll()
+{
+    local coll=$1
+    local bench_exec=$exec_root/nhbr-$coll
+
+    dims=( 2 3 4 )
+    rads=( 1 2 3 4 )
+
+    for d in ${dims[@]}; do
+        for r in ${rads[@]}; do
+            echo "============ dimension = $d, radius = $r," \
+                 "friendship_thr = $frndship_thr, alg = $alg ============"
+            local options="-t moore -d $d -r $r -n $itr"
+            mpiexec -n "$num_procs" "$bench_exec" $options \
+            | tee -a "$out_dir/${alg}.d${d}.r${r}.${num_procs}"
+        done
+    done
+}
+
+rsg-nhbr-allgather()
+{
+    rsg-nhbr-coll allgather
+}
+
+rsg-nhbr-coll()
+{
+    local coll=$1
+    local bench_exec=$exec_root/nhbr-$coll
+
+    prob_list=( 0.05 0.1 0.2 0.4 0.6 0.8 )
+
+    for p in ${prob_list[@]}; do
+        for i in $(seq 10); do
+            echo "============ sparsity factor p = $p," \
+                 "friendship_thr = $frndship_thr, alg = $alg ============"
+            local options="-t rsg -p $p -n $itr"
+            mpiexec -n "$num_procs" "$bench_exec" $options\
+            | tee -a "$out_dir/${alg}.p${p}.${num_procs}"
+        done
+    done
+}
+
+is_valid_bench()
+{
+    local bench_name=$1
+    for name in ${bench_names[@]}; do
+        if [ "$bench_name" == $name ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+print_usage()
+{
+    usage=$(basename "$0")
+    usage="$usage [options] <benchmark>"$'\n'
+    usage="$usage options:"$'\n'
+    usage="$usage    -h:           print this usage message"$'\n'
+    usage="$usage    -l:           list benchmark names"$'\n'
+    usage="$usage    -n <number>:  number of processes. Default = $num_procs"$'\n'
+    usage="$usage    -o <dir>:     output directory. Default = $out_root"$'\n'
+    usage="$usage    -e <dir>:     executables directory. Default = $exec_root"$'\n'
+    echo "$usage"
+}
+
+while getopts ":hln:o:e:" opt; do
+    case $opt in
+        h)
+            print_usage
+            exit 0
+            ;;
+        l)
+            echo ${bench_names[@]}
+            exit 0
+            ;;
+        n)
+            num_procs=$OPTARG
+            ;;
+        o)
+            out_root=$OPTARG
+            ;;
+        e)
+            exec_root=$OPTARG
+            ;;
+        \?)
+            echo "Invalid option"
+            print_usage
+            exit 1
+            ;;
+    esac
+done
+
+shift $(($OPTIND-1))
+
+if [ $# -ne 1 ]; then
+    print_usage
+    exit 1
+fi
+
+bench_name=$1
+out_dir=$out_root/${bench_name}.out/$num_procs
+
+if [ ! -d "$out_dir" ]; then
+    mkdir -p "$out_dir"
+fi
+
+for alg in {comb,auto}; do
+    export MPICH_INEIGHBOR_ALLGATHER_INTRA_ALGORITHM=$alg
+    export MPICH_NEIGHBOR_COLL_MSG_COMB_FRNDSHP_THRSHLD=$frndship_thr
+    if ! is_valid_bench $bench_name; then
+        echo "Invalid benchmark name"
+        print_usage
+        exit 1
+    fi
+    $bench_name
+done
