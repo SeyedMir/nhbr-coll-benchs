@@ -4,13 +4,15 @@
 #include "mpi.h"
 #include "nhbr_topo.h"
 
-static int make_rsg_nhbrhood(MPI_Comm comm, float p,
+static int make_rsg_nhbrhood(MPI_Comm comm, struct rsg_params params,
         int *indegree_ptr, int **sources_ptr, int **sourcesweights_ptr,
         int *outdegree_ptr, int **destinations_ptr, int **destweights_ptr)
 {
     int my_rank, size;
     MPI_Comm_rank(comm, &my_rank);
     MPI_Comm_size(comm, &size);
+
+    float p = params.p;
 
     int i, j, indgr, outdgr, inidx, outidx;
     indgr = outdgr = inidx = outidx = 0;
@@ -145,10 +147,12 @@ static int array_add(const int *a, const int *b, int size, int *c)
     return 0;
 }
 
-static int make_moore_nhbrhood(MPI_Comm comm, int d, int r,
+static int make_moore_nhbrhood(MPI_Comm comm, struct moore_params params,
         int *indegree_ptr, int **sources_ptr, int **sourcesweights_ptr,
         int *outdegree_ptr, int **destinations_ptr, int **destweights_ptr)
 {
+    int r = params.r;
+    int d = params.d;
     int i, indgr, outdgr, inidx, outidx, comm_size, my_rank, nhbr_rank, min_dim;
     int *srcs, *srcwghts, *dests, *destwghts;
     int dims[d];
@@ -267,11 +271,11 @@ int make_nhbrhood(MPI_Comm comm, struct nhbrhood_config config,
                   int *outdegree_ptr, int **destinations_ptr, int **destweights_ptr)
 {
     if(config.topo == RSG) {
-        return make_rsg_nhbrhood(comm, config.p,
+        return make_rsg_nhbrhood(comm, config.topo_params.rsg_params,
                                  indegree_ptr, sources_ptr, sourcesweights_ptr,
                                  outdegree_ptr, destinations_ptr, destweights_ptr);
     } else if(config.topo == MOORE) {
-        return make_moore_nhbrhood(comm, config.d, config.r,
+        return make_moore_nhbrhood(comm, config.topo_params.moore_params,
                                    indegree_ptr, sources_ptr, sourcesweights_ptr,
                                    outdegree_ptr, destinations_ptr, destweights_ptr);
     }

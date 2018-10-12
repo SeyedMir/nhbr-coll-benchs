@@ -6,11 +6,23 @@ enum Topology {
     MOORE,  /* Moore neighborhodd */
 };
 
-struct nhbrhood_config {
-    enum Topology topo;
+struct rsg_params {
+    float p;
+};
+
+struct moore_params {
     int d;
     int r;
-    float p;
+};
+
+union topo_params {
+    struct rsg_params rsg_params;
+    struct moore_params moore_params;
+};
+
+struct nhbrhood_config {
+    enum Topology topo;
+    union topo_params topo_params;
 };
 
 int make_nhbrhood(MPI_Comm comm, struct nhbrhood_config config,

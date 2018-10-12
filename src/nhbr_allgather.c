@@ -11,11 +11,8 @@
 #include "bench.h"
 
 struct bench_config {
-    enum Topology topo;
     int itr;
-    int d;
-    int r;
-    float p;
+    struct nhbrhood_config nhbrhood_config;
 };
 
 struct time_stats {
@@ -161,7 +158,7 @@ static int parse_arguments(int my_rank, int argc, char **argv, struct bench_conf
         "    -r, --radius <radius>    Radius value of the moore topology. Default is 2.\n"
         "\n"
         "    -p, --prob <sparsity>    Sparsity factor for the random sparse graph topology.\n"
-        "                             Must be used  with '-t rsg' option. Default is 0.2.\n"
+        "                             Must be used  with '-t rsg' option.\n"
         "\n"
         "    -h, --help               Show this usage message.\n"
         "\n";
@@ -177,32 +174,32 @@ static int parse_arguments(int my_rank, int argc, char **argv, struct bench_conf
 
     /* Set config defaults */
     config->itr = 1000;
-    config->topo = MOORE;
-    config->d = 2;
-    config->r = 2;
-    config->p = 0.2;
+    config->nhbrhood_config.topo = MOORE;
+    config->nhbrhood_config.topo_params.moore_params.d = 2;
+    config->nhbrhood_config.topo_params.moore_params.r = 2;
 
     int c;
     while((c = getopt_long(argc, argv, "n:t:d:r:p:h", opts, NULL)) != -1) {
+        union topo_params *topo_params = &config->nhbrhood_config.topo_params;
         switch (c) {
             case 'n':
                 if(int_from_string(optarg, &config->itr) != 0)
                     return -1;
                 break;
             case 't':
-                if(topo_from_string(optarg, &config->topo) != 0)
+                if(topo_from_string(optarg, &config->nhbrhood_config.topo) != 0)
                     return -1;
                 break;
             case 'd':
-                if(int_from_string(optarg, &config->d) != 0)
+                if(int_from_string(optarg, &topo_params->moore_params.d) != 0)
                     return -1;
                 break;
             case 'r':
-                if(int_from_string(optarg, &config->r) != 0)
+                if(int_from_string(optarg, &topo_params->moore_params.r) != 0)
                     return -1;
                 break;
             case 'p':
-                if(float_from_string(optarg, &config->p) != 0)
+                if(float_from_string(optarg, &topo_params->rsg_params.p) != 0)
                     return -1;
                 break;
             case 'h':
@@ -267,13 +264,7 @@ int main(int argc, char** argv)
     /* Defining the neighborhood */
     int indgr, outdgr;
     int *srcs, *srcwghts, *dests, *destwghts;
-    struct nhbrhood_config nhbrhood_config = {
-        .topo = config.topo,
-        .p = config.p,
-        .d = config.d,
-        .r = config.r,
-    };
-    int err = make_nhbrhood(MPI_COMM_WORLD, nhbrhood_config,
+    int err = make_nhbrhood(MPI_COMM_WORLD, config.nhbrhood_config,
                             &indgr, &srcs, &srcwghts,
                             &outdgr, &dests, &destwghts);
     if(err)
