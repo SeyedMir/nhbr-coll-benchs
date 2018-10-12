@@ -31,8 +31,7 @@ static struct time_stats iterate_coll(int itr,
     int skip = itr / 10;
     double start_time = 0;
     int i;
-    for(i = 0; i < itr; i++)
-    {
+    for(i = 0; i < itr; i++) {
         if(i == skip)
             start_time = MPI_Wtime();
 
@@ -74,8 +73,7 @@ static void run_loop(int itr, int indgr, int outdgr, int my_rank, MPI_Comm nhbr_
 	    sendbuf[i] = my_rank;
 #endif
 
-    for(i = 0; i < num_msg_sizes; i++)
-    {
+    for(i = 0; i < num_msg_sizes; i++) {
         int msg_size = msg_sizes[i];
         if(my_rank == 0)
             printf("------ Starting the experimet with %d Byte(s) ------\n", msg_size);
@@ -91,10 +89,8 @@ static void run_loop(int itr, int indgr, int outdgr, int my_rank, MPI_Comm nhbr_
 
 #ifdef ERROR_CHECK
         int j;
-        for(j = 0; j < indgr; j++)
-        {
-            if(recvbuf[j] != srcs[j])
-            {
+        for(j = 0; j < indgr; j++) {
+            if(recvbuf[j] != srcs[j]) {
                 fprintf(stderr,
                         "Rank %d: ERROR: mismatch between recv buffer "
                         "and srcs at index %d\n", my_rank, j);
@@ -103,8 +99,7 @@ static void run_loop(int itr, int indgr, int outdgr, int my_rank, MPI_Comm nhbr_
         }
 #endif
 
-        if(my_rank == 0)
-        {
+        if(my_rank == 0) {
             printf("Total communication time = %lf  (s)\n", time_stats.total);
             printf("Single iteration average time = %lf  (s)\n\n", time_stats.average);
         }
@@ -131,8 +126,7 @@ static int float_from_string(const char *str, float *number)
     errno = 0;
     char *endptr;
     *number = strtof(str, &endptr);
-    if(errno != 0 || endptr == str)
-    {
+    if(errno != 0 || endptr == str) {
         free(endptr);
         return -1;
     }
@@ -189,10 +183,8 @@ static int parse_arguments(int my_rank, int argc, char **argv, struct bench_conf
     config->p = 0.2;
 
     int c;
-    while((c = getopt_long(argc, argv, "n:t:d:r:p:h", opts, NULL)) != -1)
-    {
-        switch (c)
-        {
+    while((c = getopt_long(argc, argv, "n:t:d:r:p:h", opts, NULL)) != -1) {
+        switch (c) {
             case 'n':
                 if(int_from_string(optarg, &config->itr) != 0)
                     return -1;
@@ -235,8 +227,7 @@ int main(int argc, char** argv)
     /* For gdb process attachment */
     /*
     i = 0;
-    if(my_rank == 0 || my_rank == 1)
-    {
+    if(my_rank == 0 || my_rank == 1) {
         char hostname[256];
         printf("sizeof hostname = %u\n", sizeof(hostname));
         gethostname(hostname, sizeof(hostname));
@@ -249,8 +240,7 @@ int main(int argc, char** argv)
     */
 
     struct bench_config config = {0};
-    if(parse_arguments(my_rank, argc, argv, &config) != 0)
-    {
+    if(parse_arguments(my_rank, argc, argv, &config) != 0) {
         if(my_rank == 0)
             fprintf(stderr, "Bad options or arguments\n");
         MPI_Abort(MPI_COMM_WORLD, 1);
@@ -259,8 +249,7 @@ int main(int argc, char** argv)
 #ifdef ERROR_CHECK
     char *out_dir = "rank_output_files";
     char *cwd = getcwd(NULL, 0);
-    if(cwd == NULL)
-    {
+    if(cwd == NULL) {
         fprintf(stderr, "Rank %d: Failed to get the current working directory\n",
                 my_rank);
         MPI_Abort(MPI_COMM_WORLD, 1);
@@ -268,8 +257,7 @@ int main(int argc, char** argv)
     char out_file[256];
     snprintf(out_file, sizeof(out_file), "%s/%d", out_dir, my_rank);
     FILE *fp = fopen(out_file, "w");
-    if(fp == NULL)
-    {
+    if(fp == NULL) {
         fprintf(stderr, "Failed to open file %s/%s\n", cwd, out_file);
         free(cwd);
         MPI_Abort(MPI_COMM_WORLD, 1);

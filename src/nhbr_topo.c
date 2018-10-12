@@ -24,8 +24,7 @@ static int make_rsg_nhbrhood(MPI_Comm comm, float p,
     int **vtopo_mat = NULL;
 
     /* Rank 0 builds the random graph and scatters it to others */
-    if(my_rank == 0)
-    {
+    if(my_rank == 0) {
         contig_vtopo_mat = (int*) calloc(size * size, sizeof(int));
         verify_contig_vtopo_mat = (int*) calloc(size * size, sizeof(int));
         vtopo_mat = (int**) malloc(size * sizeof(int*));
@@ -35,10 +34,8 @@ static int make_rsg_nhbrhood(MPI_Comm comm, float p,
         /* Making the random graph */
         srand(time(NULL));
         float x;
-        for(i = 0; i < size; i++)
-        {
-            for(j = 0; j < size; j++)
-            {
+        for(i = 0; i < size; i++) {
+            for(j = 0; j < size; j++) {
                 if(i == j) continue;
                 x = (float)rand() / RAND_MAX;
                 if(x < p)
@@ -62,12 +59,9 @@ static int make_rsg_nhbrhood(MPI_Comm comm, float p,
     /* Verify the correctness of matrix distribution */
     MPI_Gather(my_row, size, MPI_INT,
                verify_contig_vtopo_mat, size, MPI_INT, 0, comm);
-    if(my_rank == 0)
-    {
-        for(i = 0; i < size*size; i++)
-        {
-            if(contig_vtopo_mat[i] != verify_contig_vtopo_mat[i])
-            {
+    if(my_rank == 0) {
+        for(i = 0; i < size*size; i++) {
+            if(contig_vtopo_mat[i] != verify_contig_vtopo_mat[i]) {
                 fprintf(stderr, "ERROR: contig matrix is not same "
                                 "as the aggregation of all my_rows!\n");
                 return 1;
@@ -78,12 +72,9 @@ static int make_rsg_nhbrhood(MPI_Comm comm, float p,
 
     MPI_Gather(my_col, size, MPI_INT,
                verify_contig_vtopo_mat, 1, mat_col_resized_t, 0, comm);
-    if(my_rank == 0)
-    {
-        for(i = 0; i < size*size; i++)
-        {
-            if(contig_vtopo_mat[i] != verify_contig_vtopo_mat[i])
-            {
+    if(my_rank == 0) {
+        for(i = 0; i < size*size; i++) {
+            if(contig_vtopo_mat[i] != verify_contig_vtopo_mat[i]) {
                 fprintf(stderr, "ERROR: contig matrix is not "\
                                 "same as the aggregation of all my_cols!\n");
                 return 1;
@@ -93,8 +84,7 @@ static int make_rsg_nhbrhood(MPI_Comm comm, float p,
 #endif
 
     /* free some memory */
-    if(my_rank == 0)
-    {
+    if(my_rank == 0) {
         free(vtopo_mat);
         free(contig_vtopo_mat);
         free(verify_contig_vtopo_mat);
@@ -103,8 +93,7 @@ static int make_rsg_nhbrhood(MPI_Comm comm, float p,
     MPI_Type_free(&mat_col_t);
 
     /* Finding indegree and outdegree */
-    for(i = 0; i < size; i++)
-    {
+    for(i = 0; i < size; i++) {
         if(my_row[i] != 0)
             outdgr++;
         if(my_col[i] != 0)
@@ -122,15 +111,12 @@ static int make_rsg_nhbrhood(MPI_Comm comm, float p,
     for(i = 0; i < outdgr; i++)
         destwghts[i] = 1;
 
-    for(i = 0; i < size; i++)
-    {
-        if(my_row[i] != 0)
-        {
+    for(i = 0; i < size; i++) {
+        if(my_row[i] != 0) {
             dests[outidx] = i;
             outidx++;
         }
-        if(my_col[i] != 0)
-        {
+        if(my_col[i] != 0) {
             srcs[inidx] = i;
             inidx++;
         }
@@ -153,8 +139,7 @@ static int make_rsg_nhbrhood(MPI_Comm comm, float p,
 static int array_add(const int *a, const int *b, int size, int *c)
 {
     int i;
-    for(i = 0; i < size; i++)
-    {
+    for(i = 0; i < size; i++) {
         c[i] = a[i] + b[i];
     }
     return 0;
@@ -178,8 +163,7 @@ static int make_moore_nhbrhood(MPI_Comm comm, int d, int r,
     MPI_Comm_rank(comm, &my_rank);
 
     /* Set the periods, and initialize dims to 0 */
-    for(i = 0; i < d; i++)
-    {
+    for(i = 0; i < d; i++) {
         periods[i] = 1;
         dims[i] = 0;
     }
@@ -188,11 +172,9 @@ static int make_moore_nhbrhood(MPI_Comm comm, int d, int r,
 
 
     /* Print the dimension sizes */
-    if(my_rank == 0)
-    {
+    if(my_rank == 0) {
         printf("dims = ");
-        for(i = 0; i < d; i++)
-        {
+        for(i = 0; i < d; i++) {
             printf("%d ", dims[i]);
         }
         printf("\n");
@@ -200,15 +182,13 @@ static int make_moore_nhbrhood(MPI_Comm comm, int d, int r,
 
     /* Find max valid r based on minimum dimension size */
     min_dim = comm_size;
-    for(i = 0; i < d; i++)
-    {
+    for(i = 0; i < d; i++) {
         if(dims[i] < min_dim)
             min_dim = dims[i];
     }
-    if(r > ((min_dim - 1) / 2)) /* Divided by 2 to avoid duplicate neighbors */
-    {
-        if(my_rank == 0)
-        {
+    if(r > ((min_dim - 1) / 2)) {
+        /* Divided by 2 to avoid duplicate neighbors */
+        if(my_rank == 0) {
             printf("ERROR: the given neighborhood radius (r = %d) is greater than "
                    "half of the minimum dimension size %d. Aborting!\n", r, min_dim);
             fflush(stdout);
@@ -237,8 +217,7 @@ static int make_moore_nhbrhood(MPI_Comm comm, int d, int r,
 
     MPI_Cart_coords(cart_comm, my_rank, d, my_coords);
     int overflow = 0;
-    while(!overflow)
-    {
+    while(!overflow) {
         /* The displacement vector will act like a counter
          * that is increased in each iteration to find the
          * next neighbor. Each digit of the counter spans
@@ -246,8 +225,8 @@ static int make_moore_nhbrhood(MPI_Comm comm, int d, int r,
          */
         array_add(my_coords, disp_vec, d, nhbr_coords);
         MPI_Cart_rank(cart_comm, nhbr_coords, &nhbr_rank);
-        if(nhbr_rank != my_rank) /* Skip the case where nhbr_coords is equal to all 0 */
-        {
+        if(nhbr_rank != my_rank) {
+            /* Skip the case where nhbr_coords is equal to all 0 */
             dests[outidx] = nhbr_rank;
             srcs[inidx] = nhbr_rank;
             outidx++;
@@ -255,20 +234,16 @@ static int make_moore_nhbrhood(MPI_Comm comm, int d, int r,
         }
 
         /* Increase displacement vector by 1 */
-        for(i = d - 1; i >= -1; i--)
-        {
-            if(i == -1)
-            {
+        for(i = d - 1; i >= -1; i--) {
+            if(i == -1) {
                 overflow = 1;
                 break;
             }
 
-            if(disp_vec[i] == r) /* Have carry, do not break */
-            {
+            if(disp_vec[i] == r) {
+                /* Have carry, do not break */
                 disp_vec[i] = -r;
-            }
-            else
-            {
+            } else {
                 disp_vec[i]++;
                 break;
             }
@@ -291,13 +266,11 @@ int make_nhbrhood(MPI_Comm comm, struct nhbrhood_config config,
                   int *indegree_ptr, int **sources_ptr, int **sourcesweights_ptr,
                   int *outdegree_ptr, int **destinations_ptr, int **destweights_ptr)
 {
-    if(config.topo == RSG)
-    {
+    if(config.topo == RSG) {
         return make_rsg_nhbrhood(comm, config.p,
                                  indegree_ptr, sources_ptr, sourcesweights_ptr,
                                  outdegree_ptr, destinations_ptr, destweights_ptr);
-    } else if(config.topo == MOORE)
-    {
+    } else if(config.topo == MOORE) {
         return make_moore_nhbrhood(comm, config.d, config.r,
                                    indegree_ptr, sources_ptr, sourcesweights_ptr,
                                    outdegree_ptr, destinations_ptr, destweights_ptr);
