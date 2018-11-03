@@ -3,17 +3,17 @@
 set -eu
 set -o pipefail
 
-bench_names=(rsg-nhbr-allgather moore-nhbr-allgather)
+BENCH_NAMES=(rsg-nhbr-allgather moore-nhbr-allgather)
 
-num_procs=16
+: ${ITR:=1000}
 
-itr=1000
+: ${FRNDSHIP_THR:=4}
 
-frndship_thr=4
+NUM_PROCS=16
 
-exec_root=.
+EXEC_ROOT=.
 
-out_root=.
+OUT_ROOT=.
 
 moore-nhbr-allgather()
 {
@@ -23,7 +23,7 @@ moore-nhbr-allgather()
 moore-nhbr-coll()
 {
     local coll=$1
-    local bench_exec=$exec_root/nhbr-$coll
+    local bench_exec=$EXEC_ROOT/nhbr-$coll
 
     dims=( 2 3 4 )
     rads=( 1 2 3 4 )
@@ -31,10 +31,10 @@ moore-nhbr-coll()
     for d in ${dims[@]}; do
         for r in ${rads[@]}; do
             echo "============ dimension = $d, radius = $r," \
-                 "friendship_thr = $frndship_thr, alg = $alg ============"
-            local options="-t moore -d $d -r $r -n $itr"
-            mpiexec -n "$num_procs" "$bench_exec" $options \
-            | tee -a "$out_dir/${alg}.d${d}.r${r}.${num_procs}"
+                 "friendship_thr = $FRNDSHIP_THR, alg = $alg ============"
+            local options="-t moore -d $d -r $r -n $ITR"
+            mpiexec -n "$NUM_PROCS" "$bench_exec" $options \
+            | tee -a "$out_dir/${alg}.d${d}.r${r}.${NUM_PROCS}"
         done
     done
 }
@@ -47,17 +47,17 @@ rsg-nhbr-allgather()
 rsg-nhbr-coll()
 {
     local coll=$1
-    local bench_exec=$exec_root/nhbr-$coll
+    local bench_exec=$EXEC_ROOT/nhbr-$coll
 
     prob_list=( 0.05 0.1 0.2 0.4 0.6 0.8 )
 
     for p in ${prob_list[@]}; do
         for i in $(seq 10); do
             echo "============ sparsity factor p = $p," \
-                 "friendship_thr = $frndship_thr, alg = $alg ============"
-            local options="-t rsg -p $p -n $itr"
-            mpiexec -n "$num_procs" "$bench_exec" $options\
-            | tee -a "$out_dir/${alg}.p${p}.${num_procs}"
+                 "friendship_thr = $FRNDSHIP_THR, alg = $alg ============"
+            local options="-t rsg -p $p -n $ITR"
+            mpiexec -n "$NUM_PROCS" "$bench_exec" $options\
+            | tee -a "$out_dir/${alg}.p${p}.${NUM_PROCS}"
         done
     done
 }
@@ -65,7 +65,7 @@ rsg-nhbr-coll()
 is_valid_bench()
 {
     local bench_name=$1
-    for name in ${bench_names[@]}; do
+    for name in ${BENCH_NAMES[@]}; do
         if [ "$bench_name" == $name ]; then
             return 0
         fi
@@ -75,15 +75,15 @@ is_valid_bench()
 
 print_usage()
 {
-    usage=$(basename "$0")
-    usage="$usage [options] <benchmark>"$'\n'
-    usage="$usage options:"$'\n'
-    usage="$usage    -h:           print this usage message"$'\n'
-    usage="$usage    -l:           list benchmark names"$'\n'
-    usage="$usage    -n <number>:  number of processes. Default = $num_procs"$'\n'
-    usage="$usage    -o <dir>:     output directory. Default = $out_root"$'\n'
-    usage="$usage    -e <dir>:     executables directory. Default = $exec_root"$'\n'
-    echo "$usage"
+    echo << EOF
+$(basename "$0")[options] <benchmark>
+options:
+    -h:           print this usage message
+    -l:           list benchmark names
+    -n <number>:  number of processes. Default = $NUM_PROCS
+    -o <dir>:     output directory. Default = $OUT_ROOT
+    -e <dir>:     executables directory. Default = $EXEC_ROOT
+EOF
 }
 
 while getopts ":hln:o:e:" opt; do
@@ -93,17 +93,17 @@ while getopts ":hln:o:e:" opt; do
             exit 0
             ;;
         l)
-            echo ${bench_names[@]}
+            echo ${BENCH_NAMES[@]}
             exit 0
             ;;
         n)
-            num_procs=$OPTARG
+            NUM_PROCS=$OPTARG
             ;;
         o)
-            out_root=$OPTARG
+            OUT_ROOT=$OPTARG
             ;;
         e)
-            exec_root=$OPTARG
+            EXEC_ROOT=$OPTARG
             ;;
         \?)
             echo "Invalid option"
@@ -113,7 +113,7 @@ while getopts ":hln:o:e:" opt; do
     esac
 done
 
-shift $(($OPTIND-1))
+shift $(( OPTIND - 1 ))
 
 if [ $# -ne 1 ]; then
     print_usage
@@ -121,7 +121,7 @@ if [ $# -ne 1 ]; then
 fi
 
 bench_name=$1
-out_dir=$out_root/${bench_name}.out/$num_procs
+out_dir=$OUT_ROOT/${bench_name}.out/$NUM_PROCS
 
 if [ ! -d "$out_dir" ]; then
     mkdir -p "$out_dir"
@@ -129,7 +129,7 @@ fi
 
 for alg in {comb,auto}; do
     export MPICH_INEIGHBOR_ALLGATHER_INTRA_ALGORITHM=$alg
-    export MPICH_NEIGHBOR_COLL_MSG_COMB_FRNDSHP_THRSHLD=$frndship_thr
+    export MPICH_NEIGHBOR_COLL_MSG_COMB_FRNDSHP_THRSHLD=$FRNDSHIP_THR
     if ! is_valid_bench $bench_name; then
         echo "Invalid benchmark name"
         print_usage
