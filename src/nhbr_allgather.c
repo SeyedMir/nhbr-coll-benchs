@@ -118,11 +118,11 @@ static int int_from_string(const char *str, int *number)
     return ret;
 }
 
-static int float_from_string(const char *str, float *number)
+static int double_from_string(const char *str, double *number)
 {
     errno = 0;
     char *endptr;
-    *number = strtof(str, &endptr);
+    *number = strtod(str, &endptr);
     if(errno != 0 || endptr == str) {
         free(endptr);
         return -1;
@@ -199,7 +199,7 @@ static int parse_arguments(int my_rank, int argc, char **argv, struct bench_conf
                     return -1;
                 break;
             case 'p':
-                if(float_from_string(optarg, &topo_params->rsg_params.p) != 0)
+                if(double_from_string(optarg, &topo_params->rsg_params.p) != 0)
                     return -1;
                 break;
             case 'h':

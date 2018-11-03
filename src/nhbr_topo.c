@@ -12,7 +12,7 @@ static int make_rsg_nhbrhood(MPI_Comm comm, struct rsg_params params,
     MPI_Comm_rank(comm, &my_rank);
     MPI_Comm_size(comm, &size);
 
-    float p = params.p;
+    double p = params.p;
 
     int i, j, indgr, outdgr, inidx, outidx;
     indgr = outdgr = inidx = outidx = 0;
@@ -35,11 +35,11 @@ static int make_rsg_nhbrhood(MPI_Comm comm, struct rsg_params params,
 
         /* Making the random graph */
         srand(time(NULL));
-        float x;
+        double x;
         for(i = 0; i < size; i++) {
             for(j = 0; j < size; j++) {
                 if(i == j) continue;
-                x = (float)rand() / RAND_MAX;
+                x = (double)rand() / RAND_MAX;
                 if(x < p)
                     vtopo_mat[i][j] = 1;
             }

@@ -7,7 +7,7 @@ enum Topology {
 };
 
 struct rsg_params {
-    float p;
+    double p;
 };
 
 struct moore_params {
