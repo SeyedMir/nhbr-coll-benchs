@@ -5,7 +5,7 @@ set -o pipefail
 
 BENCH_NAMES=(rsg-nhbr-allgather moore-nhbr-allgather)
 
-: ${ITR:=1000}
+: ${ITR:=500}
 
 : ${FRNDSHIP_THR:=4}
 
@@ -25,13 +25,13 @@ moore-nhbr-coll()
     local coll=$1
     local bench_exec=$EXEC_ROOT/nhbr-$coll
 
-    dims=( 2 3 4 )
-    rads=( 1 2 3 4 )
+    dims=( 2 )
+    rads=( 2 )
 
     for d in ${dims[@]}; do
         for r in ${rads[@]}; do
-            echo "============ dimension = $d, radius = $r," \
-                 "friendship_thr = $FRNDSHIP_THR, alg = $alg ============"
+            echo "=== #procs = $NUM_PROCS, dimension = $d, radius = $r," \
+                 "friendship_thr = $FRNDSHIP_THR, alg = $alg ==="
             local options="-t moore -d $d -r $r -n $ITR"
             mpiexec -n "$NUM_PROCS" "$bench_exec" $options \
             | tee -a "$out_dir/${alg}.d${d}.r${r}.${NUM_PROCS}"
@@ -49,12 +49,13 @@ rsg-nhbr-coll()
     local coll=$1
     local bench_exec=$EXEC_ROOT/nhbr-$coll
 
-    prob_list=( 0.05 0.1 0.2 0.4 0.6 0.8 )
+    local prob_list=( 0.05 )
+    local n_runs=1
 
     for p in ${prob_list[@]}; do
-        for i in $(seq 10); do
-            echo "============ sparsity factor p = $p," \
-                 "friendship_thr = $FRNDSHIP_THR, alg = $alg ============"
+        for i in $(seq "$n_runs"); do
+            echo "=== Run $i/$n_runs, #procs = $NUM_PROCS, sparsity p = $p,"\
+                 "friendship_thr = $FRNDSHIP_THR, alg = $alg ==="
             local options="-t rsg -p $p -n $ITR"
             mpiexec -n "$NUM_PROCS" "$bench_exec" $options\
             | tee -a "$out_dir/${alg}.p${p}.${NUM_PROCS}"
@@ -75,7 +76,7 @@ is_valid_bench()
 
 print_usage()
 {
-    echo << EOF
+    cat << EOF
 $(basename "$0")[options] <benchmark>
 options:
     -h:           print this usage message
@@ -127,7 +128,7 @@ if [ ! -d "$out_dir" ]; then
     mkdir -p "$out_dir"
 fi
 
-for alg in {comb,auto}; do
+for alg in {auto,comb}; do
     export MPICH_INEIGHBOR_ALLGATHER_INTRA_ALGORITHM=$alg
     export MPICH_NEIGHBOR_COLL_MSG_COMB_FRNDSHP_THRSHLD=$FRNDSHIP_THR
     if ! is_valid_bench $bench_name; then
