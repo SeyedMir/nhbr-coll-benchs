@@ -193,9 +193,11 @@ static int make_moore_nhbrhood(MPI_Comm comm, struct moore_params params,
     if(r > ((min_dim - 1) / 2)) {
         /* Divided by 2 to avoid duplicate neighbors */
         if(my_rank == 0) {
-            printf("ERROR: the given neighborhood radius (r = %d) is greater than "
-                   "half of the minimum dimension size %d. Aborting!\n", r, min_dim);
-            fflush(stdout);
+            fprintf(stderr, "ERROR: Bad radius (%d) versus min_dim_size (%d).\n"
+                            "The given raduis must be less than or equal to "
+                            "(min_dim_size - 1) / 2.\n"
+                            "Increase the number of processes or decrease the "
+                            "radius or dimension values.\n", r, min_dim);
         }
         MPI_Comm_free(&cart_comm);
         MPI_Finalize();
